@@ -17,10 +17,10 @@ enum Command {
 
 pub async fn run() {
     let args = Cli::parse();
-    
+
     if let Err(err) = init_tracing() {
         error!("Error: {}", err);
-        return
+        return;
     }
 
     let result = match args.command {
@@ -32,11 +32,11 @@ pub async fn run() {
     }
 }
 
-
 fn init_tracing() -> Result<(), String> {
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
-        .from_env().map_err(|err| err.to_string())?;
+        .from_env()
+        .map_err(|err| err.to_string())?;
     let (layer, _) = Layer::new(filter);
     tracing_subscriber::registry()
         .with(layer)

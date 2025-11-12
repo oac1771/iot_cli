@@ -1,11 +1,10 @@
-use clap::Parser;
-use btleplug::api::{
-    bleuuid::BleUuid, Central, CentralEvent, Manager as _, Peripheral, ScanFilter,
+use btleplug::{
+    api::{Central, CentralEvent, Manager, Peripheral, ScanFilter, bleuuid::BleUuid},
+    platform::Manager as PlatformManager,
 };
-use btleplug::platform::{Adapter, Manager};
+use clap::Parser;
 use futures::stream::StreamExt;
-
-use super::error::CommandError;
+use tracing::info;
 
 // const IOT_LOCAL_NAME: &str = "iot";
 
@@ -16,28 +15,18 @@ pub struct ScanCmd {
 }
 
 impl ScanCmd {
-    pub async fn handle(self) -> Result<(), CommandError> {
+    pub async fn handle(self) -> Result<(), ScanError> {
+        let manager = PlatformManager::new().await?;
+        let adapters = manager.adapters().await?;
+        let central = adapters.into_iter().nth(0).ok_or(ScanError::AdapterNotFound)?;
 
-        let manager = Manager::new().await.unwrap();
-    
-        // get the first bluetooth adapter
-        // connect to the adapter
-        let central = get_central(&manager).await;
-    
-        let central_state = central.adapter_state().await.unwrap();
-        println!("CentralState: {:?}", central_state);
-    
-        // Each adapter has an event stream, we fetch via events(),
-        // simplifying the type, this will return what is essentially a
-        // Future<Result<Stream<Item=CentralEvent>>>.
-        let mut events = central.events().await.unwrap();
-    
-        // start scanning for devices
-        central.start_scan(ScanFilter::default()).await.unwrap();
-    
-        // Print based on whatever the event receiver outputs. Note that the event
-        // receiver blocks, so in a real program, this should be run in its own
-        // thread (not task, as this library does not yet use async channels).
+        let central_state = central.adapter_state().await?;
+        info!("CentralState: {:?}", central_state);
+
+        let mut events = central.events().await?;
+
+        central.start_scan(ScanFilter::default()).await?;
+
         while let Some(event) = events.next().await {
             match event {
                 CentralEvent::DeviceDiscovered(id) => {
@@ -47,33 +36,24 @@ impl ScanCmd {
                         .and_then(|p| p.local_name)
                         .map(|local_name| format!("Name: {local_name}"))
                         .unwrap_or_default();
-                    println!("DeviceDiscovered: {:?} {}", id, name);
+                    info!("DeviceDiscovered: {:?} {}", id, name);
                 }
                 CentralEvent::StateUpdate(state) => {
-                    println!("AdapterStatusUpdate {:?}", state);
+                    info!("AdapterStatusUpdate {:?}", state);
                 }
                 CentralEvent::DeviceConnected(id) => {
-                    println!("DeviceConnected: {:?}", id);
+                    info!("DeviceConnected: {:?}", id);
                 }
                 CentralEvent::DeviceDisconnected(id) => {
-                    println!("DeviceDisconnected: {:?}", id);
-                }
-                CentralEvent::ManufacturerDataAdvertisement {
-                    id,
-                    manufacturer_data,
-                } => {
-                    println!(
-                        "ManufacturerDataAdvertisement: {:?}, {:?}",
-                        id, manufacturer_data
-                    );
+                    info!("DeviceDisconnected: {:?}", id);
                 }
                 CentralEvent::ServiceDataAdvertisement { id, service_data } => {
-                    println!("ServiceDataAdvertisement: {:?}, {:?}", id, service_data);
+                    info!("ServiceDataAdvertisement: {:?}, {:?}", id, service_data);
                 }
                 CentralEvent::ServicesAdvertisement { id, services } => {
                     let services: Vec<String> =
                         services.into_iter().map(|s| s.to_short_string()).collect();
-                    println!("ServicesAdvertisement: {:?}, {:?}", id, services);
+                    info!("ServicesAdvertisement: {:?}, {:?}", id, services);
                 }
                 _ => {}
             }
@@ -82,7 +62,14 @@ impl ScanCmd {
     }
 }
 
-async fn get_central(manager: &Manager) -> Adapter {
-    let adapters = manager.adapters().await.unwrap();
-    adapters.into_iter().nth(0).unwrap()
+#[derive(Debug, thiserror::Error)]
+pub enum ScanError {
+    #[error("{source}")]
+    BtlePlug {
+        #[from]
+        source: btleplug::Error,
+    },
+
+    #[error("")]
+    AdapterNotFound
 }
