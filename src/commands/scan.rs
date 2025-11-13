@@ -1,12 +1,14 @@
+use std::pin::Pin;
+
 use btleplug::{
-    api::{Central, CentralEvent, Manager, Peripheral, ScanFilter, bleuuid::BleUuid},
-    platform::Manager as PlatformManager,
+    api::{Central, CentralEvent, Manager, Peripheral, ScanFilter},
+    platform::{Adapter, Manager as PlatformManager, Peripheral as PlatformPeripheral },
 };
 use clap::Parser;
-use futures::stream::StreamExt;
+use futures::{Stream, stream::StreamExt};
 use tracing::info;
 
-// const IOT_LOCAL_NAME: &str = "iot";
+const IOT_LOCAL_NAME: &str = "Trouble Advert";
 
 #[derive(Debug, Parser)]
 pub struct ScanCmd {
@@ -18,7 +20,10 @@ impl ScanCmd {
     pub async fn handle(self) -> Result<(), ScanError> {
         let manager = PlatformManager::new().await?;
         let adapters = manager.adapters().await?;
-        let central = adapters.into_iter().nth(0).ok_or(ScanError::AdapterNotFound)?;
+        let central = adapters
+            .into_iter()
+            .nth(0)
+            .ok_or(ScanError::AdapterNotFound)?;
 
         let central_state = central.adapter_state().await?;
         info!("CentralState: {:?}", central_state);
@@ -27,38 +32,34 @@ impl ScanCmd {
 
         central.start_scan(ScanFilter::default()).await?;
 
-        while let Some(event) = events.next().await {
-            match event {
-                CentralEvent::DeviceDiscovered(id) => {
-                    let peripheral = central.peripheral(&id).await.unwrap();
-                    let properties = peripheral.properties().await.unwrap();
-                    let name = properties
-                        .and_then(|p| p.local_name)
-                        .map(|local_name| format!("Name: {local_name}"))
-                        .unwrap_or_default();
-                    info!("DeviceDiscovered: {:?} {}", id, name);
-                }
-                CentralEvent::StateUpdate(state) => {
-                    info!("AdapterStatusUpdate {:?}", state);
-                }
-                CentralEvent::DeviceConnected(id) => {
-                    info!("DeviceConnected: {:?}", id);
-                }
-                CentralEvent::DeviceDisconnected(id) => {
-                    info!("DeviceDisconnected: {:?}", id);
-                }
-                CentralEvent::ServiceDataAdvertisement { id, service_data } => {
-                    info!("ServiceDataAdvertisement: {:?}, {:?}", id, service_data);
-                }
-                CentralEvent::ServicesAdvertisement { id, services } => {
-                    let services: Vec<String> =
-                        services.into_iter().map(|s| s.to_short_string()).collect();
-                    info!("ServicesAdvertisement: {:?}, {:?}", id, services);
-                }
-                _ => {}
+        loop {
+            if let Some(peripheral) = get_iot_peripheral(&mut events, &central).await {
+                let properties = peripheral.properties().await.unwrap().unwrap();
+                info!("Found device: {:?}", properties);
+                break 
             }
-        }
+        };
+
         Ok(())
+    }
+}
+
+async fn get_iot_peripheral(events: &mut Pin<Box<dyn Stream<Item = CentralEvent> + Send>>, central: &Adapter) -> Option<PlatformPeripheral> {
+    if let Some(event) = events.next().await {
+        if let CentralEvent::DeviceDiscovered(id) = event {
+            let peripheral = central.peripheral(&id).await.ok()?;
+            let properties = peripheral.properties().await.ok()??;
+            let local_name = properties.local_name.unwrap_or_default();
+
+            if local_name == IOT_LOCAL_NAME {
+                return Some(peripheral)
+            }
+            return None
+        } else {
+            return None
+        }
+    } else {
+        return None
     }
 }
 
@@ -71,5 +72,5 @@ pub enum ScanError {
     },
 
     #[error("")]
-    AdapterNotFound
+    AdapterNotFound,
 }
