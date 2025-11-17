@@ -8,7 +8,7 @@ use clap::Parser;
 use futures::{Stream, stream::StreamExt};
 use tracing::info;
 
-const IOT_LOCAL_NAME: &str = "Trouble Advert";
+const IOT_LOCAL_NAME: &str = "Trouble Example";
 
 #[derive(Debug, Parser)]
 pub struct ScanCmd {
@@ -32,13 +32,15 @@ impl ScanCmd {
 
         central.start_scan(ScanFilter::default()).await?;
 
-        loop {
+        let peripheral = loop {
             if let Some(peripheral) = get_iot_peripheral(&mut events, &central).await {
                 let properties = peripheral.properties().await.unwrap().unwrap();
                 info!("Found device: {:?}", properties);
-                break 
+                break peripheral
             }
         };
+
+        let foo = peripheral.connect().await.unwrap();
 
         Ok(())
     }
