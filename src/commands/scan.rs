@@ -2,13 +2,13 @@ use std::pin::Pin;
 
 use btleplug::{
     api::{Central, CentralEvent, Manager, Peripheral, ScanFilter},
-    platform::{Adapter, Manager as PlatformManager, Peripheral as PlatformPeripheral },
+    platform::{Adapter, Manager as PlatformManager, Peripheral as PlatformPeripheral},
 };
 use clap::Parser;
 use futures::{Stream, stream::StreamExt};
 use tracing::info;
 
-const IOT_LOCAL_NAME: &str = "Trouble Example";
+const IOT_LOCAL_NAME: &str = "TrouBLE [Trouble Example]";
 
 #[derive(Debug, Parser)]
 pub struct ScanCmd {
@@ -36,32 +36,31 @@ impl ScanCmd {
             if let Some(peripheral) = get_iot_peripheral(&mut events, &central).await {
                 let properties = peripheral.properties().await.unwrap().unwrap();
                 info!("Found device: {:?}", properties);
-                break peripheral
+                break peripheral;
             }
         };
 
-        let foo = peripheral.connect().await.unwrap();
+        peripheral.connect().await.unwrap();
 
         Ok(())
     }
 }
 
-async fn get_iot_peripheral(events: &mut Pin<Box<dyn Stream<Item = CentralEvent> + Send>>, central: &Adapter) -> Option<PlatformPeripheral> {
-    if let Some(event) = events.next().await {
-        if let CentralEvent::DeviceDiscovered(id) = event {
-            let peripheral = central.peripheral(&id).await.ok()?;
-            let properties = peripheral.properties().await.ok()??;
-            let local_name = properties.local_name.unwrap_or_default();
+async fn get_iot_peripheral(
+    events: &mut Pin<Box<dyn Stream<Item = CentralEvent> + Send>>,
+    central: &Adapter,
+) -> Option<PlatformPeripheral> {
+    if let Some(CentralEvent::DeviceDiscovered(id)) = events.next().await {
+        let peripheral = central.peripheral(&id).await.ok()?;
+        let properties = peripheral.properties().await.ok()??;
+        let local_name = properties.local_name.unwrap_or_default();
 
-            if local_name == IOT_LOCAL_NAME {
-                return Some(peripheral)
-            }
-            return None
-        } else {
-            return None
+        if local_name == IOT_LOCAL_NAME {
+            return Some(peripheral);
         }
+        None
     } else {
-        return None
+        None
     }
 }
 
