@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
 use btleplug::{
-    api::{Central, CentralEvent, Manager, Peripheral, ScanFilter},
+    api::{Central, CentralEvent, Manager, Peripheral, ScanFilter, WriteType},
     platform::{Adapter, Manager as PlatformManager, Peripheral as PlatformPeripheral},
 };
 use clap::Parser;
@@ -9,6 +9,7 @@ use futures::{Stream, stream::StreamExt};
 use tracing::info;
 
 const IOT_LOCAL_NAME: &str = "TrouBLE [Trouble Example]";
+const IOT_BATTERY_SERVICE_STATUS_UUID: &str = "408813df-5dd4-1f87-ec11-cdb001100000";
 
 #[derive(Debug, Parser)]
 pub struct ScanCmd {
@@ -34,14 +35,31 @@ impl ScanCmd {
 
         let peripheral = loop {
             if let Some(peripheral) = get_iot_peripheral(&mut events, &central).await {
-                let properties = peripheral.properties().await.unwrap().unwrap();
-                info!("Found device: {:?}", properties);
+                // let properties = peripheral.properties().await.unwrap().unwrap();
+                // info!("Found device: {:?}", properties);
                 break peripheral;
             }
         };
 
-        peripheral.connect().await.unwrap();
+        if let Err(err) = peripheral.connect().await {
+            eprintln!("Error connecting: {}", err);
+        }
+        peripheral.discover_services().await.unwrap();
+        let characteristics = peripheral.characteristics();
+        let status_characteristic = characteristics
+            .iter()
+            .find(|c| c.uuid.to_string() == IOT_BATTERY_SERVICE_STATUS_UUID)
+            .unwrap();
+        println!("{:?}", status_characteristic);
 
+        let status = peripheral.read(status_characteristic).await.unwrap();
+        println!("Status: {:?}", status);
+
+        let return_status = vec![false as u8];
+        peripheral.write(status_characteristic, &return_status, WriteType::WithoutResponse).await.unwrap();
+        println!("Successfully wrote to device");
+
+        std::thread::sleep(std::time::Duration::from_secs(100));
         Ok(())
     }
 }
