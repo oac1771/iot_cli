@@ -2,6 +2,7 @@
 name = "iot_cli"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.90"
 
 [dependencies]
 btleplug = "0.11.8"
@@ -12,4 +13,7 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = "1.18.1"
+uuid = "1.19.0"
+
+# Iot
+services = { path = "../rust_iot/crates/services" }
