@@ -1,12 +1,10 @@
-use btleplug::{
-    api::{Central, CentralEvent, Manager, Peripheral, ScanFilter},
-    platform::{Adapter, Manager as PlatformManager, Peripheral as PlatformPeripheral},
-};
+use btleplug::api::Peripheral;
 use clap::Parser;
-use futures::{Stream, stream::StreamExt};
+use futures::stream::StreamExt;
 use services::health::HEALTH_STATUS_CHAR_UUID;
-use std::pin::Pin;
 use uuid::Uuid;
+
+use crate::services::central::Central;
 
 const IOT_LOCAL_NAME: &str = "TrouBLE [Trouble Example]";
 
@@ -15,47 +13,27 @@ pub struct ScanCmd;
 
 impl ScanCmd {
     pub async fn handle(self) -> Result<(), ScanError> {
-
-        println!("HealthServer Characteristic UUID: {:?}", HEALTH_STATUS_CHAR_UUID);
-
-        let manager = PlatformManager::new().await?;
-        let adapters = manager.adapters().await?;
-        let central = adapters
-            .into_iter()
-            .nth(0)
-            .ok_or(ScanError::AdapterNotFound)?;
-
-        let mut events = central.events().await?;
-
-        central.start_scan(ScanFilter::default()).await?;
-
-        let peripheral = loop {
-            if let Some(peripheral) = get_iot_peripheral(&mut events, &central).await {
-                break peripheral;
-            }
-        };
+        let central = Central::new().await.unwrap();
+        let peripheral = central.find_peripheral(IOT_LOCAL_NAME).await.unwrap();
 
         if let Err(err) = peripheral.connect().await {
             eprintln!("Error connecting: {}", err);
         }
         peripheral.discover_services().await.unwrap();
 
-        for c in peripheral.characteristics() {
-            let uuid = Uuid::from_bytes(*c.uuid.as_bytes());
-            println!("{}", uuid);
-        
-            if uuid == HEALTH_STATUS_CHAR_UUID {
-                println!("✅ Matched Health Status characteristic");
-            }
+        let characteristics = peripheral.characteristics();
+        let status_characteristic = characteristics
+            .iter()
+            .find(|c| Uuid::from_bytes(*c.uuid.as_bytes()) == HEALTH_STATUS_CHAR_UUID)
+            .unwrap();
+
+        println!("{:?}", status_characteristic);
+
+        peripheral.subscribe(status_characteristic).await.unwrap();
+        while let Some(notification) = peripheral.notifications().await.unwrap().next().await {
+            let value: bool = notification.value[0] == 1;
+            println!("Value: {:?}", value);
         }
-
-        // let characteristics = peripheral.characteristics();
-        // let status_characteristic = characteristics
-        //     .iter()
-        //     .find(|c| c.uuid.as_bytes() == HEALTH_STATUS_CHARACTERISTICS.as_raw())
-        //     .unwrap();
-
-        // println!("{:?}", status_characteristic);
 
         // let status = peripheral.read(status_characteristic).await.unwrap();
         // println!("Status: {:?}", status);
@@ -65,7 +43,7 @@ impl ScanCmd {
         //     .write(
         //         status_characteristic,
         //         &return_status,
-        //         WriteType::WithoutResponse,
+        //         btleplug::api::WriteType::WithoutResponse,
         //     )
         //     .await
         //     .unwrap();
@@ -76,22 +54,6 @@ impl ScanCmd {
     }
 }
 
-async fn get_iot_peripheral(
-    events: &mut Pin<Box<dyn Stream<Item = CentralEvent> + Send>>,
-    central: &Adapter,
-) -> Option<PlatformPeripheral> {
-    if let Some(CentralEvent::DeviceUpdated(id)) = events.next().await {
-        let peripheral = central.peripheral(&id).await.ok()?;
-        let properties = peripheral.properties().await.ok()??;
-        let local_name = properties.local_name.unwrap_or_default();
-        if local_name == IOT_LOCAL_NAME {
-            return Some(peripheral);
-        }
-        None
-    } else {
-        None
-    }
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ScanError {
@@ -100,7 +62,4 @@ pub enum ScanError {
         #[from]
         source: btleplug::Error,
     },
-
-    #[error("")]
-    AdapterNotFound,
 }
