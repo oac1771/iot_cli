@@ -1,6 +1,7 @@
 use btleplug::{
     api::{
-        Central as ApiCentral, CentralEvent, Manager, Peripheral, ScanFilter, ValueNotification,
+        Central as ApiCentral, CentralEvent, CharPropFlags, Manager, Peripheral, ScanFilter,
+        ValueNotification,
     },
     platform::{Adapter, Manager as PlatformManager, Peripheral as PlatformPeripheral},
 };
@@ -57,6 +58,14 @@ impl Central {
             .find(|c| Uuid::from_bytes(*c.uuid.as_bytes()) == characteristic_uuid)
             .ok_or_else(|| Error::CharacteristicNotFound)?;
 
+        if !characteristic
+            .properties
+            .iter()
+            .any(|c| c == CharPropFlags::NOTIFY)
+        {
+            return Err(Error::CharacteristicDoesNotSupportNotify);
+        }
+
         peripheral.subscribe(characteristic).await?;
 
         let stream = peripheral.notifications().await?.filter(move |n| {
@@ -67,6 +76,37 @@ impl Central {
         });
 
         Ok(stream)
+    }
+
+    pub async fn write(
+        &self,
+        peripheral: &PlatformPeripheral,
+        characteristic_uuid: Uuid,
+        data: &[u8]
+    ) -> Result<(), Error> {
+        let characteristics = peripheral.characteristics();
+        let characteristic = characteristics
+            .iter()
+            .find(|c| Uuid::from_bytes(*c.uuid.as_bytes()) == characteristic_uuid)
+            .ok_or_else(|| Error::CharacteristicNotFound)?;
+
+        if !characteristic
+            .properties
+            .iter()
+            .any(|c| c == CharPropFlags::WRITE)
+        {
+            return Err(Error::CharacteristicDoesNotSupportNotify);
+        }
+
+        peripheral
+            .write(
+                characteristic,
+                data,
+                btleplug::api::WriteType::WithoutResponse,
+            )
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -89,4 +129,10 @@ pub enum Error {
 
     #[error("")]
     CharacteristicNotFound,
+
+    #[error("")]
+    CharacteristicDoesNotSupportNotify,
+
+    #[error("")]
+    CharacteristicDoesNotSupportWrite,
 }

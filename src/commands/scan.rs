@@ -1,6 +1,6 @@
 use clap::Parser;
 use futures::{pin_mut, stream::StreamExt};
-use services::health::HEALTH_STATUS_CHAR_UUID;
+use services::{led::LED_STATUS_CHAR_UUID, health::HEALTH_STATUS_CHAR_UUID};
 
 use crate::services::central::Central;
 
@@ -14,31 +14,18 @@ impl ScanCmd {
         let central = Central::new().await.unwrap();
         let peripheral = central.find_peripheral(IOT_LOCAL_NAME).await.unwrap();
 
-        let stream = central
-            .subscribe(&peripheral, HEALTH_STATUS_CHAR_UUID)
-            .await
-            .unwrap();
-
-        pin_mut!(stream);
-
-        while let Some(i) = stream.next().await {
-            let value: bool = i.value[0] == 1;
-            println!("Value: {:?}", value);
-        }
-
-        // let status = peripheral.read(status_characteristic).await.unwrap();
-        // println!("Status: {:?}", status);
-
-        // let return_status = vec![false as u8];
-        // peripheral
-        //     .write(
-        //         status_characteristic,
-        //         &return_status,
-        //         btleplug::api::WriteType::WithoutResponse,
-        //     )
+        // let stream = central
+        //     .subscribe(&peripheral, HEALTH_STATUS_CHAR_UUID)
         //     .await
         //     .unwrap();
-        // println!("Successfully wrote to device");
+        // pin_mut!(stream);
+        // while let Some(i) = stream.next().await {
+        //     let value: bool = i.value[0] == 1;
+        //     println!("Value: {:?}", value);
+        // }
+
+        central.write(&peripheral, LED_STATUS_CHAR_UUID, &vec![]).await.unwrap();
+        println!("Successfully wrote to device");
 
         // std::thread::sleep(std::time::Duration::from_secs(100));
         Ok(())
