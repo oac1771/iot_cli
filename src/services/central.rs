@@ -82,7 +82,7 @@ impl Central {
         &self,
         peripheral: &PlatformPeripheral,
         characteristic_uuid: Uuid,
-        data: &[u8]
+        data: &[u8],
     ) -> Result<(), Error> {
         let characteristics = peripheral.characteristics();
         let characteristic = characteristics
@@ -95,7 +95,7 @@ impl Central {
             .iter()
             .any(|c| c == CharPropFlags::WRITE)
         {
-            return Err(Error::CharacteristicDoesNotSupportNotify);
+            return Err(Error::CharacteristicDoesNotSupportWrite);
         }
 
         peripheral
@@ -105,6 +105,30 @@ impl Central {
                 btleplug::api::WriteType::WithoutResponse,
             )
             .await?;
+
+        Ok(())
+    }
+
+    pub async fn read(
+        &self,
+        peripheral: &PlatformPeripheral,
+        characteristic_uuid: Uuid,
+    ) -> Result<(), Error> {
+        let characteristics = peripheral.characteristics();
+        let characteristic = characteristics
+            .iter()
+            .find(|c| Uuid::from_bytes(*c.uuid.as_bytes()) == characteristic_uuid)
+            .ok_or_else(|| Error::CharacteristicNotFound)?;
+
+        if !characteristic
+            .properties
+            .iter()
+            .any(|c| c == CharPropFlags::READ)
+        {
+            return Err(Error::CharacteristicDoesNotSupportRead);
+        }
+
+        peripheral.read(characteristic).await?;
 
         Ok(())
     }
@@ -118,21 +142,24 @@ pub enum Error {
         source: btleplug::Error,
     },
 
-    #[error("")]
+    #[error("AdapterNotFound")]
     AdapterNotFound,
 
-    #[error("")]
+    #[error("PeripheralPropertiesNotFound")]
     PeripheralPropertiesNotFound,
 
-    #[error("")]
+    #[error("LocalNameNotFound")]
     LocalNameNotFound,
 
-    #[error("")]
+    #[error("CharacteristicNotFound")]
     CharacteristicNotFound,
 
-    #[error("")]
-    CharacteristicDoesNotSupportNotify,
+    #[error("CharacteristicDoesNotSupportRead")]
+    CharacteristicDoesNotSupportRead,
 
-    #[error("")]
+    #[error("CharacteristicDoesNotSupportWrite")]
     CharacteristicDoesNotSupportWrite,
+
+    #[error("CharacteristicDoesNotSupportNotify")]
+    CharacteristicDoesNotSupportNotify,
 }
