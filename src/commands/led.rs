@@ -13,7 +13,7 @@ impl LedCmd {
         let peripheral = central.find_peripheral(IOT_LOCAL_NAME).await?;
 
         central
-            .write(&peripheral, LED_STATUS_CHAR_UUID, &vec![])
+            .write(&peripheral, LED_STATUS_CHAR_UUID, &[])
             .await?;
         println!("Successfully wrote to device");
 

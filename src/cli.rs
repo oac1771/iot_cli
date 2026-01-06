@@ -1,4 +1,4 @@
-use crate::commands::{led::LedCmd, health::HealthCmd};
+use crate::commands::{health::HealthCmd, led::LedCmd};
 use clap::{Parser, Subcommand};
 use tracing::{error, level_filters::LevelFilter};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*, reload::Layer};
