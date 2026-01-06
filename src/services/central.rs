@@ -113,7 +113,7 @@ impl Central {
         &self,
         peripheral: &PlatformPeripheral,
         characteristic_uuid: Uuid,
-    ) -> Result<(), Error> {
+    ) -> Result<Vec<u8>, Error> {
         let characteristics = peripheral.characteristics();
         let characteristic = characteristics
             .iter()
@@ -128,9 +128,9 @@ impl Central {
             return Err(Error::CharacteristicDoesNotSupportRead);
         }
 
-        peripheral.read(characteristic).await?;
+        let result = peripheral.read(characteristic).await?;
 
-        Ok(())
+        Ok(result)
     }
 }
 

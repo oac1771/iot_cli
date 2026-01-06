@@ -1,4 +1,4 @@
-use crate::commands::{led::LedCmd, status::StatusCmd};
+use crate::commands::{led::LedCmd, health::HealthCmd};
 use clap::{Parser, Subcommand};
 use tracing::{error, level_filters::LevelFilter};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*, reload::Layer};
@@ -12,7 +12,7 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    Status(StatusCmd),
+    Health(HealthCmd),
     Led(LedCmd),
 }
 
@@ -25,7 +25,7 @@ pub async fn run() {
     }
 
     let result = match args.command {
-        Command::Status(cmd) => cmd.handle().await.map_err(|err| err.to_string()),
+        Command::Health(cmd) => cmd.handle().await.map_err(|err| err.to_string()),
         Command::Led(cmd) => cmd.handle().await.map_err(|err| err.to_string()),
     };
 
